@@ -153,8 +153,11 @@ func (j *GmapJob) Process(ctx context.Context, resp *scrapemate.Response) (any, 
 	}
 
 	var next []scrapemate.IJob
+	var rawPlacesFound int
 
 	if strings.Contains(resp.URL, "/maps/place/") {
+		rawPlacesFound = 1
+
 		jopts := []PlaceJobOptions{}
 		if j.ExitMonitor != nil {
 			jopts = append(jopts, WithPlaceJobExitMonitor(j.ExitMonitor))
@@ -170,6 +173,8 @@ func (j *GmapJob) Process(ctx context.Context, resp *scrapemate.Response) (any, 
 	} else {
 		doc.Find(`div[role=feed] div[jsaction]>a`).Each(func(_ int, s *goquery.Selection) {
 			if href := s.AttrOr("href", ""); href != "" {
+				rawPlacesFound++
+
 				jopts := []PlaceJobOptions{}
 				if j.ExitMonitor != nil {
 					jopts = append(jopts, WithPlaceJobExitMonitor(j.ExitMonitor))
@@ -197,7 +202,7 @@ func (j *GmapJob) Process(ctx context.Context, resp *scrapemate.Response) (any, 
 		_ = j.CompletionTracker.SeedDiscovered(j.ID, len(next))
 	}
 
-	log.Info(fmt.Sprintf("%d places found", len(next)))
+	log.Info(fmt.Sprintf("%d places found, %d unique places", rawPlacesFound, len(next)))
 
 	return nil, next, nil
 }
