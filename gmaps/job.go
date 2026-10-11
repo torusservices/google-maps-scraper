@@ -167,7 +167,14 @@ func (j *GmapJob) Process(ctx context.Context, resp *scrapemate.Response) (any, 
 			jopts = append(jopts, WithPlaceJobWriterManagedCompletion())
 		}
 
-		placeJob := NewPlaceJob(j.ID, j.LangCode, resp.URL, j.ExtractEmail, j.ExtractExtraReviews, jopts...)
+		placeJob := NewPlaceJob(
+			j.ID,
+			j.LangCode,
+			resp.URL,
+			j.ExtractEmail,
+			j.ExtractExtraReviews,
+			jopts...,
+		)
 
 		next = append(next, placeJob)
 	} else {
@@ -184,7 +191,14 @@ func (j *GmapJob) Process(ctx context.Context, resp *scrapemate.Response) (any, 
 					jopts = append(jopts, WithPlaceJobWriterManagedCompletion())
 				}
 
-				nextJob := NewPlaceJob(j.ID, j.LangCode, href, j.ExtractEmail, j.ExtractExtraReviews, jopts...)
+				nextJob := NewPlaceJob(
+					j.ID,
+					j.LangCode,
+					href,
+					j.ExtractEmail,
+					j.ExtractExtraReviews,
+					jopts...,
+				)
 
 				if j.Deduper == nil || j.Deduper.AddIfNotExists(ctx, href) {
 					next = append(next, nextJob)
@@ -209,6 +223,8 @@ func (j *GmapJob) Process(ctx context.Context, resp *scrapemate.Response) (any, 
 
 func (j *GmapJob) BrowserActions(ctx context.Context, page scrapemate.BrowserPage) scrapemate.Response {
 	var resp scrapemate.Response
+
+	log := scrapemate.GetLoggerFromContext(ctx)
 
 	pageResponse, err := page.Goto(j.GetFullURL(), scrapemate.WaitUntilDOMContentLoaded)
 	if err != nil {
@@ -256,6 +272,12 @@ func (j *GmapJob) BrowserActions(ctx context.Context, page scrapemate.BrowserPag
 			return resp
 		}
 
+		log.Info(fmt.Sprintf(
+			"PAGE STATS: single_place=true html_size=%.2f MB url=%s",
+			float64(len(body))/(1024*1024),
+			page.URL(),
+		))
+
 		resp.Body = []byte(body)
 
 		return resp
@@ -263,7 +285,7 @@ func (j *GmapJob) BrowserActions(ctx context.Context, page scrapemate.BrowserPag
 
 	scrollSelector := `div[role='feed']`
 
-	_, err = scroll(ctx, page, j.MaxDepth, scrollSelector)
+	scrollCount, err := scroll(ctx, page, j.MaxDepth, scrollSelector)
 	if err != nil {
 		resp.Error = err
 
@@ -275,6 +297,13 @@ func (j *GmapJob) BrowserActions(ctx context.Context, page scrapemate.BrowserPag
 		resp.Error = err
 		return resp
 	}
+
+	log.Info(fmt.Sprintf(
+		"PAGE STATS: single_place=false html_size=%.2f MB scrolls=%d url=%s",
+		float64(len(body))/(1024*1024),
+		scrollCount,
+		page.URL(),
+	))
 
 	resp.Body = []byte(body)
 
@@ -322,7 +351,8 @@ func clickRejectCookiesIfRequired(page scrapemate.BrowserPage) {
 	}`)
 }
 
-func scroll(ctx context.Context,
+func scroll(
+	ctx context.Context,
 	page scrapemate.BrowserPage,
 	maxDepth int,
 	scrollSelector string,
